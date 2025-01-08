@@ -58,6 +58,16 @@ const uint8_t atr_fido[] = {
     0x75, 0x62, 0x69, 0x4b, 0x65, 0x79, 0x40
 };
 
+static const curve_mapping_t curve_mappings[] = {
+    { FIDO2_CURVE_P256,   MBEDTLS_ECP_DP_SECP256R1 },
+    { FIDO2_CURVE_P384,   MBEDTLS_ECP_DP_SECP384R1 },
+    { FIDO2_CURVE_P521,   MBEDTLS_ECP_DP_SECP521R1 },
+    { FIDO2_CURVE_P256K1, MBEDTLS_ECP_DP_SECP256K1 },
+    { FIDO2_CURVE_X25519, MBEDTLS_ECP_DP_CURVE25519 },
+    { FIDO2_CURVE_X448,   MBEDTLS_ECP_DP_CURVE448 },
+    { 0, MBEDTLS_ECP_DP_NONE }
+};
+
 uint8_t fido_get_version_major() {
     return PICO_FIDO_VERSION_MAJOR;
 }
@@ -92,60 +102,52 @@ int fido_unload() {
 }
 
 mbedtls_ecp_group_id fido_curve_to_mbedtls(int curve) {
-    if (curve == FIDO2_CURVE_P256) {
-        return MBEDTLS_ECP_DP_SECP256R1;
-    }
-    else if (curve == FIDO2_CURVE_P384) {
-        return MBEDTLS_ECP_DP_SECP384R1;
-    }
-    else if (curve == FIDO2_CURVE_P521) {
-        return MBEDTLS_ECP_DP_SECP521R1;
-    }
-    else if (curve == FIDO2_CURVE_P256K1) {
-        return MBEDTLS_ECP_DP_SECP256K1;
-    }
-    else if (curve == FIDO2_CURVE_X25519) {
-        return MBEDTLS_ECP_DP_CURVE25519;
-    }
-    else if (curve == FIDO2_CURVE_X448) {
-        return MBEDTLS_ECP_DP_CURVE448;
+    for (const curve_mapping_t *mapping = curve_mappings; mapping->fido_curve != 0; mapping++) {
+        if (mapping->fido_curve == curve) {
+            return mapping->mbedtls_curve;
+        }
     }
     return MBEDTLS_ECP_DP_NONE;
 }
+
 int mbedtls_curve_to_fido(mbedtls_ecp_group_id id) {
-    if (id == MBEDTLS_ECP_DP_SECP256R1) {
-        return FIDO2_CURVE_P256;
-    }
-    else if (id == MBEDTLS_ECP_DP_SECP384R1) {
-        return FIDO2_CURVE_P384;
-    }
-    else if (id == MBEDTLS_ECP_DP_SECP521R1) {
-        return FIDO2_CURVE_P521;
-    }
-    else if (id == MBEDTLS_ECP_DP_SECP256K1) {
-        return FIDO2_CURVE_P256K1;
-    }
-    else if (id == MBEDTLS_ECP_DP_CURVE25519) {
-        return MBEDTLS_ECP_DP_CURVE25519;
-    }
-    else if (id == MBEDTLS_ECP_DP_CURVE448) {
-        return FIDO2_CURVE_X448;
+    for (const curve_mapping_t *mapping = curve_mappings; mapping->fido_curve != 0; mapping++) {
+        if (mapping->mbedtls_curve == id) {
+            return mapping->fido_curve;
+        }
     }
     return 0;
 }
 
+static void init_key_path(key_path_config_t *config, const uint8_t *cred_id) {
+    if (!config || !cred_id) {
+        return;
+    }
+
+    memcpy(config->path, cred_id, KEY_PATH_LEN);
+
+    *(uint32_t *)config->path = HARDENED_BIT | FIDO_KEY_PURPOSE;
+
+    for (int i = KEY_ENTRIES_START; i < KEY_PATH_ENTRIES; i++) {
+        uint32_t *entry = (uint32_t *)(config->path + i * sizeof(uint32_t));
+        *entry |= HARDENED_BIT;
+    }
+}
+
 int fido_load_key(int curve, const uint8_t *cred_id, mbedtls_ecdsa_context *key) {
+    if (!cred_id || !key) {
+        return CTAP2_ERR_INVALID_PARAMETER;
+    }
+
     mbedtls_ecp_group_id mbedtls_curve = fido_curve_to_mbedtls(curve);
     if (mbedtls_curve == MBEDTLS_ECP_DP_NONE) {
         return CTAP2_ERR_UNSUPPORTED_ALGORITHM;
     }
-    uint8_t key_path[KEY_PATH_LEN];
-    memcpy(key_path, cred_id, KEY_PATH_LEN);
-    *(uint32_t *) key_path = 0x80000000 | 10022;
-    for (int i = 1; i < KEY_PATH_ENTRIES; i++) {
-        *(uint32_t *) (key_path + i * sizeof(uint32_t)) |= 0x80000000;
-    }
-    return derive_key(NULL, false, key_path, mbedtls_curve, key);
+
+    key_path_config_t key_config = {0};
+    init_key_path(&key_config, cred_id);
+
+    return derive_key(NULL, false, key_config.path, mbedtls_curve, key);
 }
 
 int x509_create_cert(mbedtls_ecdsa_context *ecdsa, uint8_t *buffer, size_t buffer_size) {

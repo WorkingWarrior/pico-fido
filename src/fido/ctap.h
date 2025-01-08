@@ -159,6 +159,7 @@ extern int mse_decrypt_ct(uint8_t *, size_t);
 #define CTAP2_ERR_FP_DATABASE_FULL          0x17
 #define CTAP2_ERR_LARGE_BLOB_STORAGE_FULL   0x18
 #define CTAP2_ERR_CREDENTIAL_EXCLUDED       0x19
+#define CTAP2_ERR_INVALID_PARAMETER         0x20
 #define CTAP2_ERR_PROCESSING                0x21
 #define CTAP2_ERR_INVALID_CREDENTIAL        0x22
 #define CTAP2_ERR_USER_ACTION_PENDING       0x23

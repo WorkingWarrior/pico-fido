@@ -22,6 +22,7 @@
 #include "files.h"
 #include "asn1.h"
 #include "management.h"
+#include "random.h"
 
 /* Forward declarations */
 extern int cbor_reset(void);
@@ -30,6 +31,7 @@ extern int cbor_reset(void);
 #define INS_READ_CONFIG    0x1D
 #define INS_WRITE_CONFIG   0x1C
 #define INS_RESET         0x1E    // Reset device
+#define INS_GET_RANDOM    0x04    // Get random data
 
 static const uint8_t man_aid[] = {
     8,
@@ -40,6 +42,7 @@ static const cmd_t cmds[] = {
     { INS_READ_CONFIG, cmd_read_config },
     { INS_WRITE_CONFIG, cmd_write_config },
     { INS_RESET, cmd_factory_reset },
+    { INS_GET_RANDOM, cmd_get_random },
     { 0x00, NULL }
 };
 
@@ -72,6 +75,33 @@ int man_select(app_t *a, uint8_t force) {
     }
 
     return PICOKEY_OK;
+}
+
+int cmd_get_random() {
+    // Sprawdź czy długość żądanych danych jest prawidłowa
+    if (P1(apdu) != 0x00 || P2(apdu) != 0x00) {
+        return SW_WRONG_P1P2();
+    }
+
+    // Sprawdź czy żądana długość nie przekracza maksymalnej
+    if (apdu.ne > MAX_RANDOM_BUFFER) {
+        return SW_WRONG_LENGTH();
+    }
+
+    // Generuj losowe dane
+    const uint8_t *random_data = random_bytes_get(apdu.ne);
+    if (!random_data) {
+        return SW_EXEC_ERROR(); 
+    }
+
+    // Kopiuj do bufora odpowiedzi
+    memcpy(res_APDU, random_data, apdu.ne);
+    res_APDU_size = apdu.ne;
+
+    // Zwolnij bufor z losowymi danymi
+    random_bytes_free(random_data);
+
+    return SW_OK();
 }
 
 int man_unload(void) {

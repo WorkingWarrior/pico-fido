@@ -54,6 +54,7 @@ typedef struct {
 #define CTAP_REGISTER            0x01    // Registration command
 #define CTAP_AUTHENTICATE        0x02    // Authenticate/sign command
 #define CTAP_VERSION             0x03    // Read version string command
+#define CTAP_CBOR                0x10
 
 #define CTAP_VENDOR_FIRST        0x40    // First vendor defined command
 #define CTAP_VENDOR_LAST         0xbf    // Last vendor defined command

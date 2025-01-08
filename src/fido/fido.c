@@ -37,16 +37,26 @@
 #include "crypto_utils.h"
 #include "otp.h"
 
+// ===== Global Variables =====
+uint8_t PICO_PRODUCT = 2;
+pinUvAuthToken_t paut = { 0 };
+uint8_t keydev_dec[32];
+bool has_keydev_dec = false;
+uint32_t user_present_time_limit = 0;
+
+// ===== External Declarations =====
+extern int cbor_parse(uint8_t cmd, const uint8_t *data, size_t len);
+extern int cmd_register();
+extern int cmd_authenticate();
+extern int cmd_version();
+extern uint8_t (*get_version_major)();
+extern uint8_t (*get_version_minor)();
+
+// ===== Forward Declarations =====
 int fido_process_apdu();
 int fido_unload();
 
-uint8_t PICO_PRODUCT = 2; // Pico FIDO
-
-pinUvAuthToken_t paut = { 0 };
-
-uint8_t keydev_dec[32];
-bool has_keydev_dec = false;
-
+// ===== Constants =====
 const uint8_t fido_aid[] = {
     8,
     0xA0, 0x00, 0x00, 0x06, 0x47, 0x2F, 0x00, 0x01
@@ -54,8 +64,8 @@ const uint8_t fido_aid[] = {
 
 const uint8_t atr_fido[] = {
     23,
-    0x3b, 0xfd, 0x13, 0x00, 0x00, 0x81, 0x31, 0xfe, 0x15, 0x80, 0x73, 0xc0, 0x21, 0xc0, 0x57, 0x59,
-    0x75, 0x62, 0x69, 0x4b, 0x65, 0x79, 0x40
+    0x3B, 0xFD, 0x13, 0x00, 0x00, 0x81, 0x31, 0xFE, 0x15, 0x80, 0x73, 0xC0,
+    0x21, 0xC0, 0x57, 0x59, 0x75, 0x62, 0x69, 0x4B, 0x65, 0x79, 0x40
 };
 
 static const curve_mapping_t curve_mappings[] = {
@@ -68,13 +78,16 @@ static const curve_mapping_t curve_mappings[] = {
     { 0, MBEDTLS_ECP_DP_NONE }
 };
 
+// ===== Version Management =====
 uint8_t fido_get_version_major() {
     return PICO_FIDO_VERSION_MAJOR;
 }
+
 uint8_t fido_get_version_minor() {
     return PICO_FIDO_VERSION_MINOR;
 }
 
+// ===== Initialization Functions =====
 int fido_select(app_t *a, uint8_t force) {
     (void) force;
     if (cap_supported(CAP_FIDO2)) {
@@ -85,10 +98,11 @@ int fido_select(app_t *a, uint8_t force) {
     return PICOKEY_ERR_FILE_NOT_FOUND;
 }
 
-extern uint8_t (*get_version_major)();
-extern uint8_t (*get_version_minor)();
+int fido_unload() {
+    return PICOKEY_OK;
+}
 
-INITIALIZER ( fido_ctor ) {
+INITIALIZER(fido_ctor) {
 #if defined(USB_ITF_CCID) || defined(ENABLE_EMULATION)
     ccid_atr = atr_fido;
 #endif
@@ -97,10 +111,7 @@ INITIALIZER ( fido_ctor ) {
     register_app(fido_select, fido_aid);
 }
 
-int fido_unload() {
-    return PICOKEY_OK;
-}
-
+// ===== Key Management Functions =====
 mbedtls_ecp_group_id fido_curve_to_mbedtls(int curve) {
     for (const curve_mapping_t *mapping = curve_mappings; mapping->fido_curve != 0; mapping++) {
         if (mapping->fido_curve == curve) {
@@ -123,11 +134,8 @@ static void init_key_path(key_path_config_t *config, const uint8_t *cred_id) {
     if (!config || !cred_id) {
         return;
     }
-
     memcpy(config->path, cred_id, KEY_PATH_LEN);
-
     *(uint32_t *)config->path = HARDENED_BIT | FIDO_KEY_PURPOSE;
-
     for (int i = KEY_ENTRIES_START; i < KEY_PATH_ENTRIES; i++) {
         uint32_t *entry = (uint32_t *)(config->path + i * sizeof(uint32_t));
         *entry |= HARDENED_BIT;
@@ -138,18 +146,16 @@ int fido_load_key(int curve, const uint8_t *cred_id, mbedtls_ecdsa_context *key)
     if (!cred_id || !key) {
         return CTAP2_ERR_INVALID_PARAMETER;
     }
-
     mbedtls_ecp_group_id mbedtls_curve = fido_curve_to_mbedtls(curve);
     if (mbedtls_curve == MBEDTLS_ECP_DP_NONE) {
         return CTAP2_ERR_UNSUPPORTED_ALGORITHM;
     }
-
     key_path_config_t key_config = {0};
     init_key_path(&key_config, cred_id);
-
     return derive_key(NULL, false, key_config.path, mbedtls_curve, key);
 }
 
+// ===== Cryptographic Operations =====
 int x509_create_cert(mbedtls_ecdsa_context *ecdsa, uint8_t *buffer, size_t buffer_size) {
     mbedtls_x509write_cert ctx;
     mbedtls_x509write_crt_init(&ctx);
@@ -157,13 +163,16 @@ int x509_create_cert(mbedtls_ecdsa_context *ecdsa, uint8_t *buffer, size_t buffe
     mbedtls_x509write_crt_set_validity(&ctx, "20220901000000", "20720831235959");
     mbedtls_x509write_crt_set_issuer_name(&ctx, "C=ES,O=Pico HSM,CN=Pico FIDO");
     mbedtls_x509write_crt_set_subject_name(&ctx, "C=ES,O=Pico HSM,CN=Pico FIDO");
+    
     uint8_t serial[16];
     random_gen(NULL, serial, sizeof(serial));
     mbedtls_x509write_crt_set_serial_raw(&ctx, serial, sizeof(serial));
+    
     mbedtls_pk_context key;
     mbedtls_pk_init(&key);
     mbedtls_pk_setup(&key, mbedtls_pk_info_from_type(MBEDTLS_PK_ECKEY));
     key.pk_ctx = ecdsa;
+    
     mbedtls_x509write_crt_set_subject_key(&ctx, &key);
     mbedtls_x509write_crt_set_issuer_key(&ctx, &key);
     mbedtls_x509write_crt_set_md_alg(&ctx, MBEDTLS_MD_SHA256);
@@ -171,15 +180,15 @@ int x509_create_cert(mbedtls_ecdsa_context *ecdsa, uint8_t *buffer, size_t buffe
     mbedtls_x509write_crt_set_subject_key_identifier(&ctx);
     mbedtls_x509write_crt_set_authority_key_identifier(&ctx);
     mbedtls_x509write_crt_set_key_usage(&ctx,
-                                        MBEDTLS_X509_KU_DIGITAL_SIGNATURE |
-                                        MBEDTLS_X509_KU_KEY_CERT_SIGN);
+                                       MBEDTLS_X509_KU_DIGITAL_SIGNATURE |
+                                       MBEDTLS_X509_KU_KEY_CERT_SIGN);
+    
     int ret = mbedtls_x509write_crt_der(&ctx, buffer, buffer_size, random_gen, NULL);
     mbedtls_x509write_crt_free(&ctx);
-    /* pk cannot be freed, as it is freed later */
-    //mbedtls_pk_free(&key);
     return ret;
 }
 
+// ===== Key Device Operations =====
 int load_keydev(uint8_t *key) {
     if (has_keydev_dec == false && !file_has_data(ef_keydev)) {
         return PICOKEY_ERR_MEMORY_FATAL;
@@ -194,11 +203,10 @@ int load_keydev(uint8_t *key) {
             return PICOKEY_EXEC_ERROR;
         }
     }
-
-    //return mkek_decrypt(key, file_get_size(ef_keydev));
     return PICOKEY_OK;
 }
 
+// ===== Key Operations =====
 int verify_key(const uint8_t *appId, const uint8_t *keyHandle, mbedtls_ecdsa_context *key) {
     for (int i = 0; i < KEY_PATH_ENTRIES; i++) {
         uint32_t k = *(uint32_t *) &keyHandle[i * sizeof(uint32_t)];
@@ -283,6 +291,7 @@ int derive_key(const uint8_t *app_id, bool new_key, uint8_t *key_handle, int cur
     return r;
 }
 
+// ===== File Management =====
 int scan_files() {
     ef_keydev = search_by_fid(EF_KEY_DEV, NULL, SPECIFY_EF);
     ef_keydev_enc = search_by_fid(EF_KEY_DEV_ENC, NULL, SPECIFY_EF);
@@ -388,6 +397,7 @@ void init_fido() {
     init_otp();
 }
 
+// ===== User Interface =====
 bool wait_button_pressed() {
     uint32_t val = EV_PRESS_BUTTON;
 #ifndef ENABLE_EMULATION
@@ -401,8 +411,6 @@ bool wait_button_pressed() {
     return val == EV_BUTTON_TIMEOUT;
 }
 
-uint32_t user_present_time_limit = 0;
-
 bool check_user_presence() {
 #if defined(ENABLE_UP_BUTTON) && ENABLE_UP_BUTTON == 1
     if (user_present_time_limit == 0 ||
@@ -410,12 +418,12 @@ bool check_user_presence() {
         if (wait_button_pressed() == true) { //timeout
             return false;
         }
-        //user_present_time_limit = board_millis();
     }
 #endif
     return true;
 }
 
+// ===== State Management =====
 uint32_t get_sign_counter() {
     uint8_t *caddr = file_get_data(ef_counter);
     return (*caddr) | (*(caddr + 1) << 8) | (*(caddr + 2) << 16) | (*(caddr + 3) << 24);
@@ -435,12 +443,7 @@ void set_opts(uint8_t opts) {
     low_flash_available();
 }
 
-extern int cmd_register();
-extern int cmd_authenticate();
-extern int cmd_version();
-extern int cbor_parse(int, uint8_t *, size_t);
-
-#define CTAP_CBOR 0x10
+// ===== CBOR Command Processing =====
 
 int cmd_cbor() {
     uint8_t *old_buf = res_APDU;
@@ -454,6 +457,7 @@ int cmd_cbor() {
     return SW_OK();
 }
 
+// ===== Command Processing =====
 static const cmd_t cmds[] = {
     { CTAP_REGISTER, cmd_register },
     { CTAP_AUTHENTICATE, cmd_authenticate },

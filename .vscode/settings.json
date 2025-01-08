@@ -41,7 +41,16 @@
         "random.h": "c",
         "cstdint": "c",
         "stdatomic.h": "c",
-        "hwrng.h": "c"
+        "hwrng.h": "c",
+        "management.h": "c",
+        "version.h": "c",
+        "apdu.h": "c",
+        "board.h": "c",
+        "cbor.h": "c",
+        "hkdf.h": "c",
+        "ctap.h": "c",
+        "fido.h": "c",
+        "pico_keys.h": "c"
     },
     "C_Cpp.dimInactiveRegions": false
 }

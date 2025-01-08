@@ -108,6 +108,8 @@ extern uint32_t user_present_time_limit;
 // Core Functions
 void init_fido(void);
 int scan_files(void);
+int fido_process_apdu();
+int fido_unload();
 
 // Key Management
 int derive_key(const uint8_t *app_id, bool new_key, uint8_t *key_handle, 

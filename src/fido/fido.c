@@ -36,6 +36,7 @@
 #include "version.h"
 #include "crypto_utils.h"
 #include "otp.h"
+#include "cbor_local.h"
 
 // ===== Global Variables =====
 uint8_t PICO_PRODUCT = 2;
@@ -45,16 +46,12 @@ bool has_keydev_dec = false;
 uint32_t user_present_time_limit = 0;
 
 // ===== External Declarations =====
-extern int cbor_parse(uint8_t cmd, const uint8_t *data, size_t len);
 extern int cmd_register();
 extern int cmd_authenticate();
 extern int cmd_version();
 extern uint8_t (*get_version_major)();
 extern uint8_t (*get_version_minor)();
-
-// ===== Forward Declarations =====
-int fido_process_apdu();
-int fido_unload();
+extern uint8_t* otp_key_1;
 
 // ===== Constants =====
 const uint8_t fido_aid[] = {
@@ -391,7 +388,6 @@ void scan_all() {
     scan_files();
 }
 
-extern void init_otp();
 void init_fido() {
     scan_all();
     init_otp();

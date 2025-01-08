@@ -35,5 +35,16 @@
     "raspberry-pi-pico.cmakeAutoConfigure": true,
     "raspberry-pi-pico.useCmakeTools": false,
     "raspberry-pi-pico.cmakePath": "${HOME}/.pico-sdk/cmake/v3.29.9/bin/cmake",
-    "raspberry-pi-pico.ninjaPath": "${HOME}/.pico-sdk/ninja/v1.12.1/ninja"
+    "raspberry-pi-pico.ninjaPath": "${HOME}/.pico-sdk/ninja/v1.12.1/ninja",
+    "files.associations": {
+        "files.h": "c",
+        "ctap.h": "c",
+        "cbor.h": "c",
+        "otp.h": "c",
+        "pico_keys_version.h": "c",
+        "oath.h": "c",
+        "board.h": "c",
+        "management.h": "c",
+        "version.h": "c"
+    }
 }

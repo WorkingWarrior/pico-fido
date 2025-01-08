@@ -35,5 +35,6 @@
 
 int oath_process_apdu();
 int oath_unload();
+int calculate_oath(uint8_t truncate, const uint8_t *key, size_t key_len, const uint8_t *chal, size_t chal_len);
 
 #endif /* OATH_H */

@@ -33,6 +33,7 @@
 #include "tusb.h"
 #endif
 
+#include "oath.h"
 #include "otp.h"
 
 static uint8_t config_seq = { 1 };
@@ -79,8 +80,9 @@ int encode_modhex(const uint8_t *in, size_t len, uint8_t *out) {
     }
     return 0;
 }
+
 static bool scanned = false;
-extern void scan_all();
+
 void init_otp() {
     if (scanned == false) {
         scan_all();
@@ -104,11 +106,6 @@ void init_otp() {
         low_flash_available();
     }
 }
-extern int calculate_oath(uint8_t truncate,
-                          const uint8_t *key,
-                          size_t key_len,
-                          const uint8_t *chal,
-                          size_t chal_len);
 
 uint16_t calculate_crc(const uint8_t *data, size_t data_len) {
     uint16_t crc = 0xFFFF;

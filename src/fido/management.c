@@ -23,9 +23,7 @@
 #include "asn1.h"
 #include "management.h"
 #include "random.h"
-
-/* Forward declarations */
-extern int cbor_reset(void);
+#include "cbor_local.h"
 
 /* Constants */
 #define INS_READ_CONFIG    0x1D

@@ -27,20 +27,9 @@
 #include "management.h"
 #include "ctap2_cbor.h"
 #include "version.h"
+#include "cbor_local.h"
 
 const bool _btrue = true, _bfalse = false;
-
-int cbor_reset();
-int cbor_get_info();
-int cbor_make_credential(const uint8_t *data, size_t len);
-int cbor_client_pin(const uint8_t *data, size_t len);
-int cbor_get_assertion(const uint8_t *data, size_t len, bool next);
-int cbor_get_next_assertion(const uint8_t *data, size_t len);
-int cbor_selection();
-int cbor_cred_mgmt(const uint8_t *data, size_t len);
-int cbor_config(const uint8_t *data, size_t len);
-int cbor_vendor(const uint8_t *data, size_t len);
-int cbor_large_blobs(const uint8_t *data, size_t len);
 
 extern int cmd_read_config();
 
